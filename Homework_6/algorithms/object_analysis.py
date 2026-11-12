@@ -3,6 +3,8 @@
 """
 import cv2
 import matplotlib.pyplot as plt 
+import numpy as np
+import random as rng
 
 class ObjectAnalysis(object):
     def template_method(self, image):
@@ -83,7 +85,31 @@ class ColorImage(MonochromeImage):
         pass
 
     def segmentation(self, image):
-        return None
+        bw = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        _, bw = cv2.threshold(bw, 40, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+        dist = cv2.distanceTransform(bw, cv2.DIST_L2, 3)
+        cv2.normalize(dist, dist, 0, 1.0, cv2.NORM_MINMAX)
+        _, dist = cv2.threshold(dist, 0.4, 1.0, cv2.THRESH_BINARY)
+        
+        kernel1 = np.ones((3,3), dtype=np.uint8)
+        dist = cv2.dilate(dist, kernel1)
+        dist_8u = dist.astype('uint8')
+        contours, _ = cv2.findContours(dist_8u, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        markers = np.zeros(dist.shape, dtype=np.int32)
+        for i in range(len(contours)):
+            cv2.drawContours(markers, contours, i, (i+1), -1)
+        cv2.circle(markers, (5,5), 3, (255,255,255), -1)
+        
+        cv2.watershed(image, markers)
+        
+        markers[markers == -1] = 0
+        output = cv2.connectedComponentsWithStats(
+            markers, 
+            4, 
+            cv2.CV_32S)
+        return (image, output)
+        
+ 
 
 """
 Декоратор - структурный паттерн
@@ -100,6 +126,7 @@ class FilteredAnalysis(ObjectAnalysis):
         w = []
         h = []
         area = []
+        moments_list = []
 
         for i in range(len(_area)):
             if _area[i] > 10 and _area[i] < 2500:
@@ -109,7 +136,21 @@ class FilteredAnalysis(ObjectAnalysis):
                 h.append(_h[i])
                 area.append(_area[i])
 
-        return (x,y,w,h,area)
+                mask = np.zeros((h[-1], w[-1]), dtype = np.uint8)
+                
+                mask.fill(255)
+                mu = cv2.moments(mask)
+                moments_list.append(mu)
+                
+                if mu['m00'] != 0:
+                    cx = mu['m10'] / (mu['m00'] + 1e-5)
+                    cy = mu['m01'] / (mu['m00'] + 1e-5)
+                else:
+                    cx, cy = 0, 0
+                    
+                print(f" * Object[{i}] - Area (M_00) = {mu['m00']:.2f} - Center: ({cx:.2f}, {cy:.2f})")
+        
+        return (x,y,w,h,moments_list)
 
 
 if __name__== '__main__':

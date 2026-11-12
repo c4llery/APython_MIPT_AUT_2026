@@ -51,9 +51,9 @@ class JsonHistDecoder(HistDecoder):
         data = None
         with open(file_path, 'r') as file:
             data = json.load(file)
-        data = {data['keys'][i]: data['values'][i] for i in range(len(data['keys']))}
-
-        return data
+    
+        return {int(k): float(v) for k, v in data.items()}
+    
 
 class ImageHistDecoder(HistDecoder):
     @staticmethod
